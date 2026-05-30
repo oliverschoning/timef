@@ -100,7 +100,11 @@ func (c *Client) Do(method, path string, body interface{}) ([]byte, error) {
 	}
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return nil, fmt.Errorf("not authenticated (HTTP %d) — log in via your browser, then retry\nbody: %s", resp.StatusCode, string(data))
+		hint := "log in via your browser, then retry"
+		if resp.StatusCode == 401 {
+			hint = "run `timef login` (browser may still be flushing the session cookie to disk — wait a few seconds)"
+		}
+		return nil, fmt.Errorf("not authenticated (HTTP %d) — %s\nbody: %s", resp.StatusCode, hint, string(data))
 	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(data))

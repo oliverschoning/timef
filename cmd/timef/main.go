@@ -76,7 +76,30 @@ func cmdLogin() {
 		fail(fmt.Errorf("could not open browser: %w", err))
 	}
 	fmt.Println(yellow.Render("Opened " + session.BaseURL + " in your default browser."))
-	fmt.Println("Log in, then run: timef status")
+
+	if session.HasGoSession() {
+		fmt.Println(green.Render("✓ Session cookie already present. Run: timef status"))
+		return
+	}
+
+	fmt.Print(dim.Render("Waiting for login (browser flushes cookies to disk periodically)…"))
+	// Browser buffers freshly-set cookies in memory; kooky reads the on-disk
+	// store. Poll until the BFF session cookie lands, or time out.
+	const timeout = 90 * time.Second
+	const interval = 2 * time.Second
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if session.HasGoSession() {
+			fmt.Println()
+			fmt.Println(green.Render("✓ Logged in. Run: timef status"))
+			return
+		}
+		time.Sleep(interval)
+		fmt.Print(dim.Render("."))
+	}
+	fmt.Println()
+	fmt.Println(yellow.Render("Timed out waiting for session cookie."))
+	fmt.Println(dim.Render("If you logged in, give the browser a moment to save cookies, then run: timef status"))
 }
 
 func cmdStatus() {
@@ -322,6 +345,7 @@ func renderWeek(w *week) {
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(dim).
+		BorderRow(true).
 		Headers(headers...).
 		Rows(rows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
@@ -378,10 +402,22 @@ func renderWeek(w *week) {
 		)
 	}
 
+	// Holidays still require logging (Helligdag - betalt). API subtracts
+	// weekday holidays from required, so add them back for the full expected.
+	weekdayHolidays := 0
+	for i := 0; i < 5; i++ {
+		if dayHolidays[i] != "" {
+			weekdayHolidays++
+		}
+	}
+
 	for _, ln := range d.Lines {
 		switch ln.RowTitle {
 		case "Normal Time":
-			fmt.Printf("  %s %s\n", dim.Render("Required:"), fmtMinutes(ln.SumInMinutes))
+			required := ln.SumInMinutes + weekdayHolidays*450
+			fmt.Printf("  %s %s   %s %s\n",
+				dim.Render("Required:"), fmtMinutes(required),
+				dim.Render("Logged:"), fmtMinutes(totalSum))
 		case "Flextime Balance":
 			val := fmtMinutes(ln.SumInMinutes)
 			if ln.SumInMinutes < 0 {

@@ -10,6 +10,29 @@ import (
 
 const cookieDomainSuffix = "poweroffice.net"
 
+// goSessionCookieName is the BFF session cookie set on go.poweroffice.net after
+// a successful browser login. Its presence on disk = login flushed.
+const goSessionCookieName = "__Host-bff"
+const goSessionDomain = "go.poweroffice.net"
+
+// HasGoSession reports whether the BFF session cookie for go.poweroffice.net is
+// present (and valid) in the on-disk browser cookie store. Browsers buffer
+// freshly-set cookies in memory and flush to disk periodically, so right after
+// login this returns false until the flush lands.
+func HasGoSession() bool {
+	cookies := kooky.AllCookies(
+		kooky.Valid,
+		kooky.Name(goSessionCookieName),
+		kooky.Domain(goSessionDomain),
+	)
+	for _, c := range cookies {
+		if c.Value != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func LoadCookies() ([]*http.Cookie, error) {
 	cookies := kooky.AllCookies(
 		kooky.Valid,
